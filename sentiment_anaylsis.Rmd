@@ -1,0 +1,187 @@
+---
+title: "Social Media Minning"
+
+author: "Suyash Tiwari"
+date:"12/26/2017"
+output: html_document:
+toc: yes
+---
+
+```{r}
+# SENTIMENT ANALYSIS
+
+# is used to see if a text is neutral, positive or negative
+# emotion analysis is used to see which emotion a text has  (happy, fear, anger)
+# both are using similar codes but the comparison lexicon is different
+
+# example: What is the sentiment towards my company?
+
+# Twitter data is useful for that type of analysis because: 
+# high volumes (500 mill/day) 
+# short messages like sms - 140 words
+# special strings (hashtags) 
+# but creative word usage makes it hard for analysis, spelling mistakes 
+
+## there is TONS of sentiment in it!
+
+
+# Sentiment Lexicon: a list of words which you are using to compare your scraped txt with
+
+# Hu Liu Lexicon got the standard of sentiment analysis lately  
+# list of pos and negative words - manually created - approx. 6800 
+
+# download the txt files to your wd
+
+# import positive and negative words
+pos = readLines("C:/Users/suyas/Downloads/TwitteR/opinion-lexicon-English/positive-words.txt")
+neg = readLines("C:/Users/suyas/Downloads/TwitteR/opinion-lexicon-English/negative-words.txt")
+
+# Lets run a test to see how this works!
+
+mytest= c("great you re here", "awesome experience", 
+          "You had a bad night", "She loves ugly candy")
+
+# the score.sentiment function is self written
+testsentiment = score.sentiment(mytest, pos, neg)
+
+class (testsentiment)
+
+testsentiment$score
+# output corresponds to the 4 test sentences - sentences can be manipulated
+
+# Lets do the whole process: writting the function and scraping - approach after J. Breen
+
+library("stringr")
+
+library("plyr")
+
+# function score.sentiment - this is how the whole function is written
+score.sentiment = function(sentences, pos.words, neg.words, .progress='none')
+{
+  # Parameters
+  # sentences: vector of text to score
+  # pos.words: vector of words of postive sentiment
+  # neg.words: vector of words of negative sentiment
+  # .progress: passed to laply() to control of progress bar
+  
+  # create simple array of scores with laply
+  scores = laply(sentences,
+                 function(sentence, pos.words, neg.words)
+                 {
+                   # remove punctuation - using global substitute
+                   sentence = gsub("[[:punct:]]", "", sentence)
+                   # remove control characters
+                   sentence = gsub("[[:cntrl:]]", "", sentence)
+                   # remove digits
+                   sentence = gsub('\\d+', '', sentence)
+                   
+                   # define error handling function when trying tolower
+                   tryTolower = function(x)
+                   {
+                     # create missing value
+                     y = NA
+                     # tryCatch error
+                     try_error = tryCatch(tolower(x), error=function(e) e)
+                     # if not an error
+                     if (!inherits(try_error, "error"))
+                       y = tolower(x)
+                     # result
+                     return(y)
+                   }
+                   # use tryTolower with sapply 
+                   sentence = sapply(sentence, tryTolower)
+                   
+                   # split sentence into words with str_split (stringr package)
+                   word.list = str_split(sentence, "\\s+")
+                   words = unlist(word.list)
+                   
+                   # compare words to the dictionaries of positive & negative terms
+                   pos.matches = match(words, pos.words)
+                   neg.matches = match(words, neg.words)
+                   
+                   # get the position of the matched term or NA
+                   # we just want a TRUE/FALSE
+                   pos.matches = !is.na(pos.matches)
+                   neg.matches = !is.na(neg.matches)
+                   
+                   # final score
+                   score = sum(pos.matches) - sum(neg.matches)
+                   return(score)
+                 }, pos.words, neg.words, .progress=.progress )
+  
+  # data frame with scores for each sentence
+  scores.df = data.frame(text=sentences, score=scores)
+  return(scores.df)
+}
+
+# tweets for country
+usatweets = searchTwitter("usa", n=900, lang="en")
+indiatweets = searchTwitter("india", n=900, lang="en")
+russiatweets = searchTwitter("russia", n=900, lang="en")
+chinatweets = searchTwitter("china", n=900, lang="en")
+
+# get text
+usa_txt = sapply(usatweets, function(x) x$getText())
+india_txt = sapply(indiatweets, function(x) x$getText())
+russia_txt = sapply(russiatweets, function(x) x$getText())
+china_txt = sapply(chinatweets, function(x) x$getText())
+
+# how many tweets of each country
+nd = c(length(usa_txt), length(india_txt), length(russia_txt), length(china_txt))
+
+# join texts
+country = c(usa_txt, india_txt, russia_txt, china_txt) 
+
+# apply function score.sentiment
+scores = score.sentiment(country, pos, neg, .progress='text')
+
+# add variables to data frame
+scores$country = factor(rep(c("usa", "india", "russia", "china"), nd))
+scores$very.pos = as.numeric(scores$score >= 2)
+scores$very.neg = as.numeric(scores$score <= -2)
+
+# how many very positives and very negatives
+numpos = sum(scores$very.pos)
+numneg = sum(scores$very.neg)
+
+# global score
+global_score = round( 100 * numpos / (numpos + numneg) )
+
+head(scores)
+
+boxplot(score~country, data=scores)
+
+library("lattice")
+
+histogram(data=scores, ~score|country, main="Sentiment Analysis of 4 Countries", xlab="", sub="Sentiment Score")
+
+### Alternative Wordcloud - vector approach
+
+tweettext = sapply(bitcoin, function(x) x$getText())
+
+tweettext=lapply(tweettext, function(x) iconv(x, "latin1", "ASCII", sub=""))
+tweettext=lapply(tweettext, function(x) gsub("htt.*",' ',x))
+tweettext=lapply(tweettext, function(x) gsub("#",'',x))
+tweettext=unlist(tweettext)
+tweettext=tolower(tweettext)
+
+library("wordcloud")
+
+? wordcloud
+
+wordcloud(tweettext, min.freq=4, scale=c(5,1), 
+          random.color=F, max.word=45, random.order=F)
+
+### removing words out of vectors
+
+mytest = c("dfd", "sadf", "wer")
+
+class(mytest)
+
+myindex = which(mytest == "dfd")
+
+mytest[-myindex]
+
+tweettext2 = which(tweettext == "amp")
+```
+
